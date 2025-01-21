@@ -2883,11 +2883,35 @@ SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
 	return 0;
 }
 
-SYSCALL_DEFINE0(meminfo)
+struct user_procinfo {
+   uint16_t cores;
+   uint16_t threads;
+};
+
+static uint64_t read_msr_int(uint32_t msr) {
+   uint32_t low, high;
+   __asm__ volatile("rdmsr"
+         : "=a"(low), "=d"(high)
+         : "c"(msr));
+   return ((uint64_t)high << 32) | low;
+}
+
+SYSCALL_DEFINE1(meminfo, struct user_procinfo __user *, info)
 {
-   struct sysinfo mi;
-   si_meminfo(&mi);
-   return mi.totalram << (PAGE_SHIFT - 10);
+   uint64_t val = read_msr_int(0x35);
+   uint16_t logical = val & 0xFFFF;
+   uint16_t physical = (val >> 16) & 0xFFFF;
+
+   struct user_procinfo inf;
+   inf.cores = physical;
+   inf.threads = logical;
+   if (copy_to_user(info, &inf, sizeof(struct user_procinfo)))
+      return -EFAULT;
+   return 0;
+
+   //struct sysinfo mi;
+   //si_meminfo(&mi);
+   //return mi.totalram << (PAGE_SHIFT - 10);
 }
 
 #ifdef CONFIG_COMPAT
